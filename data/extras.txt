@@ -1,0 +1,29 @@
+#version 330 core
+
+#section "sqr"
+#pragma once
+#include "test.txt" section "common"
+
+float sqr( float value ){
+	return value * value;
+}
+
+#section "bar"
+#pragma once
+#include "test.txt" section "common"
+
+float bar( float x, float y ){
+	return sqrt( sqr( x ) + sqr( y ) );
+}
+
+#section "foo"
+#pragma once
+#include "test.txt" section "common"
+
+float foo( float value ){
+	return value / 2 this is an error;
+}
+
+#section "comment"
+#include "test.txt" section "common"
+//This doesn't have pragma once

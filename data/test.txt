@@ -1,0 +1,30 @@
+#version 330 core
+
+#section "common"
+#pragma once
+
+float once(){
+	return 1;
+}
+
+#section "vertex"
+#include section "common"
+#include section "common"
+#include "extras.txt" section "sqr"
+#include "extras.txt" section "sqr"
+#include "extras.txt" section "bar"
+#include "extras.txt" section "bar"
+#include "extras.txt" section "foo"
+#include "extras.txt" section "foo"
+#include "extras.txt" section "comment"
+#include "extras.txt" section "comment"
+#include "extras.txt"
+#include "extras.txt"
+
+float bar( float x, float y ) {// Redefinition
+	return 1;
+}
+void main(){
+	float an_error = foo( bar( 10, 20 ) );
+	return an_error;
+}
