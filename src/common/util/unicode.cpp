@@ -2,7 +2,8 @@
 #include <vector>
 #include <string>
 #include <exception>
-#include "unicode.h"
+#include "unicode.hpp"
+#include "util/exceptions.hpp"
 
 namespace Motor{
     namespace Unicode{

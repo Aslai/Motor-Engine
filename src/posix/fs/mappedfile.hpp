@@ -1,7 +1,7 @@
 #ifndef MOTOR_H_FS_MAPPEDFILE_HPP
 #define MOTOR_H_FS_MAPPEDFILE_HPP
 
-#include "platform.h"
+#include "platform.hpp"
 #include <string>
 #include <vector>
 #include "util/exceptions.hpp"

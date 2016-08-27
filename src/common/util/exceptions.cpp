@@ -4,7 +4,7 @@
 
 namespace Motor{
     namespace Exception{
-        Error::Error(std::string explanation = "") : explain(explanation){
+        Error::Error(std::string explanation) : explain(explanation){
             for (size_t i = 0; i < explain.size();){
                 if (explain[i] == '\r'){
                     explain.erase(explain.begin() + i, explain.begin() + i + 1);
@@ -14,15 +14,14 @@ namespace Motor{
             }
         }
 
-        const char * Error::what() const{
+        const char * Error::what() const noexcept{
             return explain.c_str();
         }
 
-        NotFound::NotFound(std::string name = "") :
+        NotFound::NotFound(std::string name) :
             Error("\nCould not find file \"" + name + "\""){
 
         }
     }
 }
 
-#endif

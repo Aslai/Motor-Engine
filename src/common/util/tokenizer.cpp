@@ -202,5 +202,3 @@ namespace Motor{
         return *this;
     }
 }
-
-#endif

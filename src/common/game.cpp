@@ -1,8 +1,8 @@
 
 extern "C" {
-	#include <SDL.h>
+	#include SDL2_H
 	#undef main
-	#include <glew.h>
+	#include GLEW_H
 }
 
 #include "util/exceptions.hpp"
@@ -16,7 +16,7 @@ int main(){
 		SDL_GLContext context;
 
 		if (SDL_Init(SDL_INIT_VIDEO) < 0){
-			throw Motor::Error("Unable to initialize SDL");
+			throw Motor::Exception::Error("Unable to initialize SDL");
 		}
 
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
@@ -27,7 +27,7 @@ int main(){
 		window = SDL_CreateWindow("Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
 		if (!window){
 			//This SDL stuff certainly isn't exception safe ;)
-			throw Motor::Error("Unable to create window");
+			throw Motor::Exception::Error("Unable to create window");
 		}
 
 
@@ -38,7 +38,7 @@ int main(){
 		SDL_GL_SetSwapInterval(1);
 
 		Motor::ShaderFile s;
-		s.Include("..\n");
+		s.Include("..\n../data/");
 		s.LoadFile("test.txt");
 		Motor::Shader shader = s.Extract("vertex");
 		printf("%d\n", shader.Get());
@@ -48,7 +48,7 @@ int main(){
 		glClear(GL_COLOR_BUFFER_BIT);
 		SDL_GL_SwapWindow(window);
 
-		SDL_Delay(20000000);
+		SDL_Delay(2000);
 
 		SDL_GL_DeleteContext(context);
 		SDL_DestroyWindow(window);
@@ -58,6 +58,8 @@ int main(){
 	catch (std::exception &e){
 		printf("%s\n", e.what());
 	}
-	SDL_Delay(1000000);
+	while( true ){
+        SDL_Delay(1000);
+	}
 	return 0;
 }

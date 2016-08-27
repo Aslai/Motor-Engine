@@ -1,9 +1,9 @@
 #ifndef MOTOR_H_ASSET_SHADER_HPP
-#definr MOTOR_H_ASSET_SHADER_HPP
+#define MOTOR_H_ASSET_SHADER_HPP
 
-#include "preprocessor.h"
+#include "preprocessor.hpp"
 extern "C"{
-    #include <glew.h>
+    #include GLEW_H
 }
 #include <memory>
 #include "util/exceptions.hpp"

@@ -15,7 +15,7 @@ namespace Motor{
 
 
     MappedFile::MappedFile(){
-        file = NULL;
+        file = INVALID_HANDLE_VALUE;
         mapping = NULL;
         view = nullptr;
         desiredaccess = NULL;

@@ -1,0 +1,9 @@
+# Ignore all directories
+/**/
+
+# Except for these
+!/src/
+!/src/**/**
+!/data/
+!/data/**/**
+

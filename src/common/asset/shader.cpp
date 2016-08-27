@@ -1,11 +1,11 @@
 #include "shader.hpp"
-#include "preprocessor.h"
+#include "preprocessor.hpp"
 extern "C"{
-    #include <glew.h>
+    #include GLEW_H
 }
 #include <memory>
 #include "util/exceptions.hpp"
-
+#include <climits>
 
 namespace Motor{
     void Shader::Compile(){
@@ -45,7 +45,7 @@ namespace Motor{
         return false;
     }
 
-    bool cmp2(const std::string & a, const std::string & prefix1, const std::string & prefix2){
+    bool Shader::cmp2(const std::string & a, const std::string & prefix1, const std::string & prefix2){
         if (cmp(a, prefix1)){
             size_t location = a.find_first_of(prefix2);
             if (location != std::string::npos && location > 0){

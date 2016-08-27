@@ -1,4 +1,6 @@
 #include "fs/mappedfile.hpp"
+#include "asset/preprocessor.hpp"
+#include <map>
 
 namespace Motor{
     void Preprocessor::move(std::string & to, const MappedFile & file, size_t start, size_t end){
@@ -105,7 +107,7 @@ namespace Motor{
         MappedFile mfile;
         std::string section = "";
         if (issection){
-            section = tok;
+            section = tok.get_string();
             trim_ends(section);
             mfile = filedata;
         }
@@ -121,7 +123,7 @@ namespace Motor{
                 if (tok.next_token()){
                     if (tok == "section"){
                         if (tok.next_token().get_type() == Tokenizer::Type::String){
-                            section = tok;
+                            section = tok.get_string();
                             trim_ends(section);
                         }
                         else{
@@ -143,8 +145,7 @@ namespace Motor{
         }
         //currentData += "#line 1 " + std::to_string(file_number) + "\n";
         defines.push_back(&sections[currentSection].defines);
-        Preprocessor p = Preprocessor(mfile, defines, filenames, section);
-        p.include_paths = include_paths;
+        Preprocessor p = Preprocessor(mfile, include_paths, defines, filenames, section);
         auto newSections = p.Preprocess();
         auto& back = *defines.back();
         defines.pop_back();
@@ -200,13 +201,7 @@ namespace Motor{
         return false;
     }
 
-
-
-    void Preprocessor::Include(std::string path){
-        include_paths.push_back(path);
-    }
-
-    const Preprocessor::std::map<std::string, context> & Preprocess(){
+    const std::map<std::string, Preprocessor::context> & Preprocessor::Preprocess(){
         bool foundChar = false;
         bool preprocessing = false;
         size_t line_no = 1;
@@ -244,13 +239,13 @@ namespace Motor{
         return sections.find(name)->second.data;
     }
 
-    const std::map<std::string, context> & Preprocessor::GetAllSections(){
+    const std::map<std::string, Preprocessor::context> & Preprocessor::GetAllSections(){
         return sections;
     }
 
     Preprocessor::Preprocessor() :
         filedata(filedata_base),
-        limitSection(limitSection),
+        limitSection(""),
         filenames(filenames_base),
         defines(defines_base),
         include_paths(include_paths_base){
@@ -265,22 +260,32 @@ namespace Motor{
         defines_base.push_back(&defines_base_first);
     }
 
-    Preprocessor::Preprocessor(const MappedFile & file, std::vector<std::string> & filenames, const std::string & limitSection) :
+    Preprocessor::Preprocessor(const MappedFile & file, const std::vector<std::string> & include_paths, const std::string & limitSection) :
         filedata(file),
         limitSection(limitSection),
-        filenames(filenames),
+        filenames(filenames_base),
         defines(defines_base),
-        include_paths(include_paths_base){
+        include_paths(include_paths){
         defines_base.push_back(&defines_base_first);
 
     }
 
-    Preprocessor::Preprocessor(const MappedFile & file, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection) :
+    Preprocessor::Preprocessor(const MappedFile & file, const std::vector<std::string> & include_paths, std::vector<std::string> & filenames, const std::string & limitSection) :
+        filedata(file),
+        limitSection(limitSection),
+        filenames(filenames),
+        defines(defines_base),
+        include_paths(include_paths){
+        defines_base.push_back(&defines_base_first);
+
+    }
+
+    Preprocessor::Preprocessor(const MappedFile & file, const std::vector<std::string> & include_paths, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection) :
         filedata(file),
         limitSection(limitSection),
         filenames(filenames),
         defines(defines),
-        include_paths(include_paths_base){
+        include_paths(include_paths){
 
     }
 
@@ -294,24 +299,35 @@ namespace Motor{
         defines_base.push_back(&defines_base_first);
     }
 
-    Preprocessor::Preprocessor(MappedFile && file, std::vector<std::string> & filenames, const std::string & limitSection) :
+    Preprocessor::Preprocessor(MappedFile && file, const std::vector<std::string> & include_paths, const std::string & limitSection) :
+        filedata_base(file),
+        filedata(filedata_base),
+        limitSection(limitSection),
+        filenames(filenames_base),
+        defines(defines_base),
+        include_paths(include_paths){
+        defines_base.push_back(&defines_base_first);
+
+    }
+
+    Preprocessor::Preprocessor(MappedFile && file, const std::vector<std::string> & include_paths, std::vector<std::string> & filenames, const std::string & limitSection) :
         filedata_base(file),
         filedata(filedata_base),
         limitSection(limitSection),
         filenames(filenames),
         defines(defines_base),
-        include_paths(include_paths_base){
+        include_paths(include_paths){
         defines_base.push_back(&defines_base_first);
 
     }
 
-    Preprocessor::Preprocessor(MappedFile && file, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection) :
+    Preprocessor::Preprocessor(MappedFile && file, const std::vector<std::string> & include_paths, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection) :
         filedata_base(file),
         filedata(filedata_base),
         limitSection(limitSection),
         filenames(filenames),
         defines(defines),
-        include_paths(include_paths_base){
+        include_paths(include_paths){
 
     }
 

@@ -21,7 +21,7 @@ float bar( float x, float y ){
 #include "test.txt" section "common"
 
 float foo( float value ){
-	return value / 2 this is an error;
+	return value / 2;
 }
 
 #section "comment"

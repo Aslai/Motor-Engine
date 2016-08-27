@@ -9,15 +9,15 @@ namespace Motor{
        	class Error : public std::exception {
         public:
             Error(std::string explanation = "");
-            virtual const char * what() const;
+            virtual const char * what() const noexcept;
 
-        private:
+        protected:
             std::string explain;
         };
 
         class NotFound : public Error {
         public:
-            not_found_error(std::string name = "");
+            NotFound(std::string name = "");
         };
     }
 }

@@ -21,10 +21,7 @@ float once(){
 #include "extras.txt"
 #include "extras.txt"
 
-float bar( float x, float y ) {// Redefinition
-	return 1;
-}
+
 void main(){
 	float an_error = foo( bar( 10, 20 ) );
-	return an_error;
 }

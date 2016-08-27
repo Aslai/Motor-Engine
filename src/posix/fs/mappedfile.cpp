@@ -1,74 +1,78 @@
-#include "platform.h"
+#include "platform.hpp"
 #include "mappedfile.hpp"
 #include <string>
 #include <vector>
 #include "util/exceptions.hpp"
+extern "C"{
+    #include <stdlib.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <fcntl.h>
+    #include <sys/mman.h>
+    #include <stdlib.h>
+    #include <limits.h>
+    #include <unistd.h>
+}
 
 namespace Motor{
-    void MappedFile::MapView(DWORD access){
+    void MappedFile::MapView(int access){
         desiredaccess = access;
-        view = MapViewOfFile(mapping, desiredaccess, 0, 0, 0);
-        if (!view){
-            throw Exception::Error("Failed to map view of file");
+        view = mmap(0, file_size, access, MAP_SHARED, file, 0 );
+        if (view == (void*) -1 ){
+            throw Exception::ErrNo("Couldn't map file");
         }
     }
 
 
     MappedFile::MappedFile(){
-        file = NULL;
-        mapping = NULL;
+        file = -1;
         view = nullptr;
-        desiredaccess = NULL;
+        desiredaccess = 0;
         file_size = 0;
     }
 
     MappedFile::MappedFile( const std::string & fileName, const std::vector<std::string> & include_paths, MappedFile::Access access ){
-        DWORD waccess = NULL, wprotect = NULL;
-        desiredaccess = NULL;
+        int faccess = 0;
+        desiredaccess = 0;
         if (access == Access::Read){
-            waccess = GENERIC_READ;
-            wprotect = PAGE_READONLY;
-            desiredaccess = FILE_MAP_READ;
+            faccess = O_RDONLY;
+            desiredaccess = PROT_READ;
         }
         else if (access == Access::ReadWrite){
-            waccess = GENERIC_WRITE | GENERIC_READ;
-            wprotect = PAGE_READWRITE;
-            desiredaccess = FILE_MAP_ALL_ACCESS;
+            faccess = O_RDWR;
+            desiredaccess = PROT_READ | PROT_WRITE;
         }
-        std::wstring wfileName;
-        file = INVALID_HANDLE_VALUE;
+        std::string testFileName;
+        file = -1;
         for (const auto & path : include_paths){
-            wfileName = TStrFromUTF8(path);
-            if (wfileName.back() != '\\' && wfileName.back() != '/'){
-                wfileName += '\\';
+            testFileName = path;
+            if (testFileName.back() != '\\' && testFileName.back() != '/'){
+                testFileName += '/';
             }
-            wfileName += TStrFromUTF8(fileName);
-            file = CreateFile(wfileName.c_str(), waccess, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (file != INVALID_HANDLE_VALUE){
+            testFileName += fileName;
+            file = open( testFileName.c_str(), faccess, 0 );
+            if ( file != -1 ){
                 break;
             }
         }
-        if (file == INVALID_HANDLE_VALUE){
-            wfileName = TStrFromUTF8(fileName);
-            file = CreateFile(wfileName.c_str(), waccess, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (file == -1){
+            testFileName = fileName;
+            file = open(testFileName.c_str(), faccess, 0 );
         }
-        if (file == INVALID_HANDLE_VALUE){
-            throw Exception::NotFound(fileName);
+        if (file == -1){
+            throw Exception::ErrNo("Could not open " + fileName);
         }
-        mapping = CreateFileMapping(file, NULL, wprotect, 0, 0, NULL);
-        if (!mapping){
-            DWORD err = GetLastError();
-            throw Exception::Error("Failed to create file mapping");
-        }
-        DWORD size_high;
-        DWORD size_low = GetFileSize(file, &size_high);
-        file_size = size_high;
-        file_size <<= sizeof(DWORD);
-        file_size += size_low;
 
-        TCHAR buffer[1000];
-        GetFinalPathNameByHandle(file, buffer, 999, VOLUME_NAME_DOS);
-        full_name = TStrToUTF8(buffer);
+        struct stat st;
+        fstat(file, &st);
+        file_size = st.st_size;
+
+        char buffer[PATH_MAX];
+        if( realpath(testFileName.c_str(), buffer) == nullptr ){
+            throw Exception::ErrNo();
+        }
+
+        full_name = buffer;
 
         MapView(desiredaccess);
 
@@ -88,26 +92,22 @@ namespace Motor{
     }
 
     MappedFile& MappedFile::operator=(const MappedFile & other){
-        if (!DuplicateHandle(GetCurrentProcess(), other.file, GetCurrentProcess(), &file, 0, FALSE, DUPLICATE_SAME_ACCESS)){
-            throw Exception::Error("Failed to dup file handle");
+        file = dup( other.file );
+        if( file == -1 ){
+            throw Exception::ErrNo("Couldn't dup file descriptor");
         }
-        if (!DuplicateHandle(GetCurrentProcess(), other.mapping, GetCurrentProcess(), &mapping, 0, FALSE, DUPLICATE_SAME_ACCESS)){
-            throw Exception::Error("Failed to dup file mapping");
-        }
-        MapView(other.desiredaccess);
         file_size = other.file_size;
         full_name = other.full_name;
+        MapView(other.desiredaccess);
         return *this;
     }
 
     MappedFile& MappedFile::operator=(MappedFile && other){
         this->desiredaccess = other.desiredaccess;
         this->file = other.file;
-        this->mapping = other.mapping;
         this->view = other.view;
         this->file_size = other.file_size;
-        other.file = INVALID_HANDLE_VALUE;
-        other.mapping = NULL;
+        other.file = -1;
         other.view = nullptr;
         full_name = std::move(other.full_name);
         return *this;
@@ -115,13 +115,10 @@ namespace Motor{
 
     MappedFile::~MappedFile(){
         if (view){
-            UnmapViewOfFile(view);
+            munmap(view, file_size);
         }
-        if (mapping){
-            CloseHandle(mapping);
-        }
-        if (file != INVALID_HANDLE_VALUE){
-            CloseHandle(file);
+        if (file != -1){
+            close(file);
         }
     }
 

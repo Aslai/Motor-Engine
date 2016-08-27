@@ -28,34 +28,35 @@ namespace Motor{
 			std::vector<std::pair<std::string, std::string>> defines;
 		};
 
-		void Include(std::string path);
-
 		const std::map<std::string, context> & Preprocess();
 		const std::string & GetSection(std::string name);
 		const std::map<std::string, context> & GetAllSections();
 		Preprocessor();
 		Preprocessor(const MappedFile & file, const std::string & limitSection = "");
-		Preprocessor(const MappedFile & file, std::vector<std::string> & filenames, const std::string & limitSection = "");
-		Preprocessor(const MappedFile & file, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection = "");
+		Preprocessor(const MappedFile & file, const std::vector<std::string> & include_paths, const std::string & limitSection = "");
+        Preprocessor(const MappedFile & file, const std::vector<std::string> & include_paths, std::vector<std::string> & filenames, const std::string & limitSection = "");
+		Preprocessor(const MappedFile & file, const std::vector<std::string> & include_paths, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection = "");
 		Preprocessor(MappedFile && file, const std::string & limitSection = "");
-		Preprocessor(MappedFile && file, std::vector<std::string> & filenames, const std::string & limitSection = "");
-		Preprocessor(MappedFile && file, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection = "");
+		Preprocessor(MappedFile && file, const std::vector<std::string> & include_paths, const std::string & limitSection = "");
+        Preprocessor(MappedFile && file, const std::vector<std::string> & include_paths, std::vector<std::string> & filenames, const std::string & limitSection = "");
+		Preprocessor(MappedFile && file, const std::vector<std::string> & include_paths, std::vector<std::vector<std::pair<std::string, std::string>>*> & defines, std::vector<std::string> & filenames, const std::string & limitSection = "");
 		std::string TransformGLLog(const std::string & log);
 
+
 	private:
+		MappedFile filedata_base;
+		const MappedFile & filedata;
+		const std::string limitSection;
+		std::vector<std::string> filenames_base;
+		std::vector<std::string> & filenames;
+		std::vector<std::pair<std::string, std::string>> defines_base_first;
+		std::vector<std::vector<std::pair<std::string, std::string>>*> defines_base;
+		std::vector<std::vector<std::pair<std::string, std::string>>*> & defines;
+		std::vector<std::string> include_paths_base;
+		const std::vector<std::string> & include_paths;
 		std::string currentData;
 		std::string currentSection;
 		std::map<std::string, context> sections;
-		std::vector<std::vector<std::pair<std::string, std::string>>*> defines_base;
-		std::vector<std::pair<std::string, std::string>> defines_base_first;
-		std::vector<std::vector<std::pair<std::string, std::string>>*> & defines;
-		std::vector<std::string> filenames_base;
-		std::vector<std::string> & filenames;
-		std::vector<std::string> include_paths_base;
-		std::vector<std::string> & include_paths;
-		const std::string limitSection;
-		MappedFile filedata_base;
-		const MappedFile & filedata;
 	};
 }
 
