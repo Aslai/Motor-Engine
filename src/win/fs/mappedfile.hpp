@@ -24,6 +24,7 @@ namespace Motor{
         MappedFile& operator=(const MappedFile & other);
         MappedFile& operator=(MappedFile && other);
         ~MappedFile();
+        void Release();
         size_t size() const;
         char& operator[](size_t idx);
         char& at(size_t idx) const;

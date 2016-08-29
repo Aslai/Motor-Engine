@@ -19,6 +19,7 @@ namespace Motor{
 		Shader(const std::string & name, const std::string & code, std::shared_ptr<Preprocessor> processor);
 		const GLuint & Get();
 		operator GLuint();
+		void Preload();
 
     private:
 		std::string code;

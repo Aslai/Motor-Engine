@@ -92,4 +92,10 @@ namespace Motor{
     Shader::operator GLuint(){
         return Get();
     }
+
+    void Shader::Preload(){
+        if (binary == 0){
+            Compile();
+        }
+    }
 }

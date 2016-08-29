@@ -114,6 +114,10 @@ namespace Motor{
     }
 
     MappedFile::~MappedFile(){
+        Release();
+    }
+
+    void MappedFile::Release(){
         if (view){
             UnmapViewOfFile(view);
         }
