@@ -1,4 +1,4 @@
-#include "platform.h"
+#include "platform.hpp"
 #include "mappedfile.hpp"
 #include <string>
 #include <vector>
@@ -35,7 +35,7 @@ namespace Motor{
             wprotect = PAGE_READWRITE;
             desiredaccess = FILE_MAP_ALL_ACCESS;
         }
-        std::wstring wfileName;
+        TString wfileName;
         file = INVALID_HANDLE_VALUE;
         for (const auto & path : include_paths){
             wfileName = TStrFromUTF8(path);

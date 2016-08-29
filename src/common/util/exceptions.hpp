@@ -1,8 +1,10 @@
 #ifndef MOTOR_H_UTIL_EXCEPTIONS_HPP
 #define MOTOR_H_UTIL_EXCEPTIONS_HPP
 
+#include "platform.hpp"
 #include <string>
 #include <exception>
+
 
 namespace Motor{
     namespace Exception{
