@@ -3,17 +3,17 @@
 
 namespace Motor{
     #ifdef UNICODE
-    std::string TStrToUTF8( const std::wstring str & ){
+	std::string TStrToUTF8( const TString & str ){
         return Unicode::ToUTF8( str );
     }
-    std::wstring TStrFromUTF8( const std::string str & ){
+	TString TStrFromUTF8( const std::string & str ){
         return Unicode::ToUTF16( str );
     }
     #else
-    std::string TStrToUTF8( const std::string str & ){
+	std::string TStrToUTF8(const TString & str){
         return str;
     }
-    std::string TStrFromUTF8( const std::string str & ){
+	TString TStrFromUTF8(const std::string & str){
         return str;
     }
     #endif

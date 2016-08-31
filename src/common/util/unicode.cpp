@@ -94,7 +94,7 @@ namespace Motor{
                 return *iter;
             }
             else{
-                size_t codepoint = (*(iter++) & Mask(10)) << 10;
+                uint32_t codepoint = (*(iter++) & Mask(10)) << 10;
                 codepoint |= *(iter) & Mask(10);
                 return codepoint;
             }

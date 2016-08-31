@@ -4,14 +4,17 @@
 #include <windows.h>
 #include <string>
 
+#define constexpr
+#define noexcept
+
 namespace Motor{
-    #ifdef UNICODE
-    std::string TStrToUTF8( const std::wstring str & );
-    std::wstring TStrFromUTF8( const std::string str & );
-    #else
-    std::string TStrToUTF8( const std::string str & );
-    std::string TStrFromUTF8( const std::string str & );
-    #endif
+#ifdef UNICODE
+	typedef std::wstring TString;
+#else
+	typedef std::string TString;
+#endif
+	std::string TStrToUTF8(const TString & str);
+	TString TStrFromUTF8(const std::string & str);
 }
 
 #endif
