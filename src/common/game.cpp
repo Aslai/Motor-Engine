@@ -7,11 +7,20 @@ extern "C" {
 
 #include "util/exceptions.hpp"
 #include "asset/shaderfile.hpp"
+#include "math/point.hpp"
+#include <cstdio>
 
 
-
-int main(){
+int main(int argc, char * argv[]){
 	try{
+	    auto p1 = Motor::MakePoint<double>(argc, 10, 3);
+	    auto p2 = Motor::MakePoint<double>(10, 4, 2);
+	    auto v1 = Motor::MakePoint<double>(10, 4, 1);
+	    auto v2 = Motor::MakePoint<double>(-10, 20, 7);
+	    printf("%f\n", Motor::PointFindPassTime( p1, p2, v1, v2 ));
+
+
+
 		SDL_Window *window;
 		SDL_GLContext context;
 
