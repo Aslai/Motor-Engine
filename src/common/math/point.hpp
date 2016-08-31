@@ -54,6 +54,30 @@ namespace Motor{
         return Point<T, sizeof...(Args) + 1>(value_a, rest...);
     }
 
+    //
+    // Given a pair of points and velocities point_a/velocity_a and point_b/velocity_b, and we assume each point moves along the vector of velocity
+    // over the interval t from 0..1, we get the following equations:
+    // ```  pos_a(t) = velocity_a * t + point_a
+    //      pos_b(t) = velocity_b * t + point_b ```
+    //
+    // We can then find the square of the distance between these two points with respect to t using the Pythagorean theorem:
+    // ```  dist(t) = sum_components( (pos_b - pos_a) ^ 2 ) ```
+    //
+    // We now have a sum of quadratic equations. We can find the point where the points come closest by finding the inflection point of the curve,
+    // which is where the first derivative is zero. The derivative is:
+    // ```  ddist(t)/dt = sum_components( 2 * (velocity_b - velocity_a) * (point_b - point_a + velocity_b * t - velocity_a * t) )   ```
+    //
+    // Now to find the inflection point, we set this derivative to zero and solve for t. At this point I just plugged it into WolframAlpha
+    // and got the following:
+    //
+    // ```  sum_components( velocity_b * (point_a - point_b) + velocity_a * (point_b - point_a) )
+    // t = -------------------------------------------------------------------------------------------
+    //                      sum_components( (velocity_b - velocity_a) ^ 2 )                             ```
+    //
+    // With the restriction that `sum_components( velocity_a ^ 2 + velocity_b ^ 2 )` is not equal to `2 * sum_components( velocity_a * velocity_b )`
+    // In which case, the trajectories may be considered parallel.
+    //
+
     namespace {
         template<class T, size_t dimensions, size_t offset>
         struct PointFindPass{
