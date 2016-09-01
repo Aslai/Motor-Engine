@@ -78,7 +78,7 @@ namespace Motor{
     // In which case, the trajectories may be considered parallel.
     //
 
-    namespace {
+    namespace Detail{
         template<class T, size_t dimensions, size_t offset>
         struct PointFindPass{
             static T CheckL (   const Motor::Point<T, dimensions> & point_a, const Motor::Point<T, dimensions> & point_b,
@@ -131,15 +131,16 @@ namespace Motor{
             }
         };
     }
+    /// Given point_a and point_b traveling at velocity_a and velocity_b respectively, find the time at which the points come closest to each other.
     template<class T, size_t dimensions>
     T PointFindPassTime( const Point<T, dimensions> & point_a, const Point<T, dimensions> & point_b,
                          const Point<T, dimensions> & velocity_a, const Point<T, dimensions> & velocity_b ){
-        if( PointFindPass<T, dimensions, dimensions>::CheckL( point_a, point_b, velocity_a, velocity_b ) ==
-            PointFindPass<T, dimensions, dimensions>::CheckR( point_a, point_b, velocity_a, velocity_b ) ){
+        if( Detail::PointFindPass<T, dimensions, dimensions>::CheckL( point_a, point_b, velocity_a, velocity_b ) ==
+            Detail::PointFindPass<T, dimensions, dimensions>::CheckR( point_a, point_b, velocity_a, velocity_b ) ){
             return T();
         }
-        return  PointFindPass<T, dimensions, dimensions>::Numerator( point_a, point_b, velocity_a, velocity_b ) /
-                PointFindPass<T, dimensions, dimensions>::Denom( point_a, point_b, velocity_a, velocity_b );
+        return  Detail::PointFindPass<T, dimensions, dimensions>::Numerator( point_a, point_b, velocity_a, velocity_b ) /
+                Detail::PointFindPass<T, dimensions, dimensions>::Denom( point_a, point_b, velocity_a, velocity_b );
     }
 }
 
