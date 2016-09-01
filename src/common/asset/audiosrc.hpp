@@ -108,7 +108,7 @@ namespace Motor{
             __m128 dec2 = _mm_set_ps( decay_recip2, decay_recip2, decay_recip2, decay_recip2 );
             for( size_t i = 0; i < dst.Size() / 4; ++i ){
                 __m128 mask = _mm_cmpgt_ps( dst[i], cmp );
-                if( ((uint32_t*)&mask)[0] || ((uint32_t*)&mask)[1] || ((uint32_t*)&mask)[2] || ((uint32_t*)&mask)[3] ){
+                if( _mm_movemask_ps( mask ) ){
                     decay_amt = decay;
                 }
                 if( decay_amt > 0 ){

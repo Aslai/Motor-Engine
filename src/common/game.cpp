@@ -57,15 +57,15 @@ int main(int argc, char * argv[]){
 	    Motor::AudioBuffer buf1, buf2;
 	    char samples1[9] = {1,2,3,4,5,6,7,8,9};
 	    float *samples2 = new float[44100*60*60];
-        for( int i = 0; i < 44100*1/*60*60*/; ++i ){
-            samples2 [i] = (float)(rand() % 2000) / 1000.0;
+        for( int i = 0; i < 44100*60*60; ++i ){
+            samples2 [i] = (float)(rand() % 2000) / 100000.0;
         }
-        buf1.Push(samples2, 44100);
-        buf2.Push(samples2, 44100);
+        buf1.Push(samples2, 44100*60*60);
+        buf2.Push(samples2, 44100*60*60);
         printf("Starting timer...\n");
         //buf2.Push(samples, 10);
         Stopwatch timer;
-        Motor::AudioMixerCompress<3,1,1,2,4> mix;
+        Motor::AudioMixerCompress<3,1,1,2,4000> mix;
         timer.Start();
         mix.Mix(buf1);
         auto end = timer.Seconds();
