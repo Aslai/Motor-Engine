@@ -3,7 +3,9 @@
 
 #include <string>
 #include <exception>
+#define MOTOR_NODEF
 #include "platform.hpp"
+#undef MOTOR_NODEF
 
 namespace Motor{
     namespace Exception{

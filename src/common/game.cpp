@@ -14,12 +14,16 @@ extern "C" {
 
 #include <ctime>
 #include "util/stopwatch.hpp"
-
+Motor::AudioMixerLimit limiter(1, 44100.0/2.0*1, 44100.0/2.0 * 3);
 void my_audio_proc(void *user, uint8_t *stream, int len) {
+	__m128* streamfloats = (__m128*) stream;
 	Motor::AudioBuffer & buffer = *(Motor::AudioBuffer*) user;
 
 	len = (len > buffer.Size() * sizeof(float) ? buffer.Size() * sizeof(float) : len);
-	memcpy(stream, buffer.Data(), len);
+	//memcpy(stream, buffer.Data(), len);
+	for( int i = 0; i < len / sizeof(float); i += 4 ){
+        streamfloats[i/4] = limiter.Apply(buffer);
+	}
 	float peak, avg;
 	float avgcnt = 0;
 	peak = avg = 0;
@@ -125,7 +129,7 @@ int main(int argc, char * argv[]){
 			buffer.PushNormalized<int16_t>((int16_t*)snd_buf, snd_len / 2, INT16_MIN, INT16_MAX);
 			buffer2.PushNormalized<int16_t>((int16_t*)snd_buf, snd_len / 2, INT16_MIN, INT16_MAX);
 		}
-		static uint32_t snd_len2;
+		/*static uint32_t snd_len2;
 		static uint8_t *snd_buf2;
 		static SDL_AudioSpec snd_spec2;
 
@@ -139,36 +143,38 @@ int main(int argc, char * argv[]){
 		else if (snd_spec2.format == AUDIO_S16){
 			buffer3.PushNormalized<int16_t>((int16_t*)snd_buf2, snd_len2 / 2, INT16_MIN, INT16_MAX);
 		}
-		Motor::AudioMixerCompress mix2(5, 0.1, 44100.0*2.0*0.2, 44100.0 * 2 * 2);
+		*/
+		Motor::AudioMixerCompress mix2(5, 0.5, 44100.0*2.0*0.2, 44100.0 * 2 * 2);
 		Motor::AudioMixerLimit mix3(1, 44100.0*2.0*0.1, 44100.0 * 2 * 1);
 		Motor::AudioMixerAmplify mix4(7);
 		Motor::AudioMixer mix5;
 
 		timer.Start();
-		mix5.Mix(buffer, buffer3, buffer3.Size());
-		buffer3.Rewind();
-		mix5.Mix(buffer, buffer3, buffer3.Size());
-		mix2.Mix(buffer);
+		//mix2.Mix(buffer);
+		//mix4.Mix(buffer);
+		//auto buffer5 = buffer;
 		mix4.Mix(buffer);
-		mix3.Mix(buffer);
-		printf("Mix: %f seconds\n", timer.Seconds());
-		buffer3.Rewind();
+		double a = timer.Seconds();
+		printf("Mix: %f seconds\n", a);
+
 		timer.Start();
-		mix5.Mix(buffer2, buffer3, buffer3.Size());
-		buffer3.Rewind();
-		mix5.Mix(buffer2, buffer3, buffer3.Size());
-		mix2.Mix2(buffer2);
-		mix4.Mix2(buffer2);
-		mix3.Mix2(buffer2);
-		printf("Mix2: %f seconds\n", timer.Seconds());
+		//mix2.Mix2(buffer2);
+		for( size_t i = 0; i < buffer2.Size() / 4; ++i ){
+             //mix4.Apply(buffer2[i]);
+		}
+		//mix4.Mix2(buffer2);
+		//mix3.Mix2(buffer2);
+		double b = timer.Seconds();
+		printf("Apply: %f seconds\n", b);
+		printf("%.2f%%slower\n", b/a);
 
 		snd_spec.format = AUDIO_F32;
 		snd_spec.callback = my_audio_proc;
 		snd_spec.userdata = &buffer;
 
 
-		SDL_GL_SetSwapInterval(1); 
-		
+		SDL_GL_SetSwapInterval(1);
+
 		if (SDL_OpenAudio(&snd_spec, NULL) < 0){
 			fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
 			exit(-1);

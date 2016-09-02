@@ -1,3 +1,4 @@
+#ifndef MOTOR_NODEF
 #ifndef MOTOR_H_PLATFORM_HPP
 #define MOTOR_H_PLATFORM_HPP
 
@@ -18,4 +19,5 @@ namespace Motor{
     }
 }
 
+#endif
 #endif

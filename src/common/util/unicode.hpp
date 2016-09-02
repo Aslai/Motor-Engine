@@ -4,7 +4,7 @@
 #include <string>
 
 #if WCHAR_MAX != 0xFFFF && WCHAR_MAX != 0x7FFF
-#error "wchar_t must be 16 bits. If it's not, please port the conversion functions."
+#pragma message "wchar_t must be 16 bits. If it's not, please port the conversion functions."
 #endif
 
 namespace Motor{

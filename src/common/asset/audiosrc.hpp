@@ -10,6 +10,7 @@ namespace Motor{
     class AudioBuffer{
         friend class AudioMixer;
         std::vector<__m128> samples;
+        __m128 * iter;
         size_t ptr;
 		size_t dangling;
     protected:
@@ -39,10 +40,14 @@ namespace Motor{
         __m128 & operator [](size_t idx){
             return samples[idx];
 		}
+		__m128 Next(){
+            return *(iter++);
+		}
 		void Push(float * samples_in, size_t length){
 			for (size_t i = 0; i + 3 < length; i += 4){
 				samples.push_back(_mm_load_ps(samples_in + i));
 			}
+			iter = &samples[ptr];
 		}
 		void ToProcess(size_t amount){
 			dangling = amount;
@@ -66,6 +71,7 @@ namespace Motor{
 					normalize(samples_in[i], lo, hi)
 					));
 			}
+			iter = &samples[ptr];
 		}
         void Print( ){
             const float * data = Data();
@@ -114,17 +120,44 @@ namespace Motor{
 		return a + (b - a) * ratio;
 	}
 
-    class AudioMixerLimit : public AudioMixer{
+    class AudioMixerBuffered : public AudioMixer{
+        std::vector<__m128> buffer;
+        size_t offset;
+    protected:
+        const __m128 & NextSample( AudioBuffer & src ){
+            buffer[offset++] = src.Next();
+            offset = offset % buffer.size();
+            return buffer[offset];
+        }
+        const __m128 & NextSample( const __m128 & src){
+            buffer[offset++] = src;
+            offset = offset % buffer.size();
+            return buffer[offset];
+        }
+        const __m128 & LookAhead( size_t amount ) const{
+            return buffer[(offset + amount) % buffer.size()];
+        }
+
+    public:
+        AudioMixerBuffered(size_t buf_len ){
+            buffer.resize( buf_len);
+            offset = 0;
+        }
+
+    };
+
+    class AudioMixerLimit : public AudioMixerBuffered{
         size_t decay_amt;
         __m128 attenuate;
 		float attenuatef;
 		float target, base;
-		size_t window_begin, window_end;
+		size_t window_begin, window_end, window_pos;
 		float threshold, attack, decay;
 		size_t iattack, idecay;
     public:
-        AudioMixerLimit( float threshold, float attack, float decay ) : threshold(threshold), attack(attack), decay(decay){
+        AudioMixerLimit( float threshold, float attack, float decay ) : AudioMixerBuffered((size_t)attack - (size_t)attack % 4), threshold(threshold), attack(attack), decay(decay){
             decay_amt = 0;
+            window_pos = 0;
             attenuate = _mm_set_ps(1,1,1,1);
 			attenuatef = 1;
 			target = 1;
@@ -138,6 +171,62 @@ namespace Motor{
         void Mix( AudioBuffer & dst, AudioBuffer & src, size_t amount ){
             Add( dst, src, amount );
             Mix( dst );
+        }
+        const __m128 & Apply( __m128 & src ){
+            const __m128 & lookahead = LookAhead(iattack);
+            float velocity = habsmax_ps(lookahead);
+            if (velocity > threshold){
+                if (window_pos >= window_end) {
+                    window_begin = window_pos + iattack;
+                }
+                window_end = window_pos + iattack;
+                float new_target = threshold / velocity;
+                if (new_target < target){
+                    if (window_pos > window_begin){
+                        window_begin = window_pos + iattack;
+                        base = target;
+                    }
+                    else{
+                        base = attenuatef;
+                    }
+                    target = new_target;
+                }
+
+            }
+            if (window_pos < window_begin){
+                const float dist = (float)((window_pos + iattack - window_begin));
+                const float dist0 = dist / attack;
+                const float dist1 = (dist + 1.0f / 4.0f) / attack;
+                const float dist2 = (dist + 2.0f / 4.0f) / attack;
+                const float dist3 = (dist + 3.0f / 4.0f) / attack;
+                const float attenuatef0 = base + (target - base) * dist0;
+                const float attenuatef1 = base + (target - base) * dist1;
+                const float attenuatef2 = base + (target - base) * dist2;
+                const float attenuatef3 = base + (target - base) * dist3;
+                attenuatef = attenuatef3;
+                attenuate = _mm_set_ps(attenuatef3, attenuatef2, attenuatef1, attenuatef0);
+            }
+            else if (window_pos < window_end){
+                attenuatef = target;
+                attenuate = _mm_set1_ps(attenuatef);
+            }
+            else if (window_end + decay > window_pos){
+                target = 1;
+                float dist = (float)(window_pos - window_end) / decay;
+                attenuatef = base + (target - base) * dist;
+                attenuate = _mm_set1_ps(attenuatef);
+            }
+            else{
+                attenuatef = base = target = 1;
+                attenuate = _mm_set1_ps(attenuatef);
+            }
+            ++window_pos;
+            src = _mm_mul_ps(NextSample(src), attenuate);
+            return src;
+        }
+        __m128 Apply( AudioBuffer & src ){
+            __m128 ret = src.Next();
+            return Apply(ret);
         }
 		void Mix(AudioBuffer & dst){
 			for (size_t i = 0; i < dst.Size() / 4 - iattack; ++i){
@@ -198,7 +287,7 @@ namespace Motor{
                 for( int j = 0; j < 4; ++j ){
 					float & lookahead = ((float*)&dst[i + iattack])[j];
 					float & d = ((float*)&dst[i])[j];
- 
+
                     if( abs(lookahead) > threshold ){
 						if( i >= window_end ) {
 							window_begin = i + iattack;
@@ -260,7 +349,7 @@ namespace Motor{
 			__m128 attenuation_base = _mm_set1_ps(pow(threshold, 1.0f - 1.0f / ratio));
 			__m128 attenuation = _mm_set1_ps(1);
 			for (size_t i = 0; i < dst.Size() / 4 - iattack; ++i){
-				envelope *= 1 / decay; 
+				envelope *= 1 / decay;
 				if (1 - envelope > threshold){
 					attenuation = _mm_mul_ps(attenuation_base, _mm_pow_ps(_mm_set1_ps(1 - envelope), invratio));
 					dst[i] = _mm_mul_ps(dst[i], attenuation);
@@ -297,6 +386,9 @@ namespace Motor{
 	public:
 		AudioMixerAmplify(float scale) : scale(scale){
 
+		}
+		__m128 Apply(AudioBuffer & dst){
+            return _mm_mul_ps(dst.Next(), _mm_set1_ps(scale));
 		}
 		void Mix(AudioBuffer & dst, AudioBuffer & src, size_t amount){
 			Add(dst, src, amount);
