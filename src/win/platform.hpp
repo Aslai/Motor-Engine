@@ -9,7 +9,7 @@
 
 namespace Motor{
 #ifdef UNICODE
-	typedef std::wstring TString;
+	typedef std::basic_string<wchar_t> TString;
 #else
 	typedef std::string TString;
 #endif

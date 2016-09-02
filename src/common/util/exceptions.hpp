@@ -3,7 +3,7 @@
 
 #include <string>
 #include <exception>
-
+#include "platform.hpp"
 
 namespace Motor{
     namespace Exception{

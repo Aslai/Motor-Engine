@@ -3,6 +3,10 @@
 
 #include <string>
 
+#if WCHAR_MAX != 0xFFFF && WCHAR_MAX != 0x7FFF
+#error "wchar_t must be 16 bits. If it's not, please port the conversion functions."
+#endif
+
 namespace Motor{
     namespace Unicode{
         std::string ToUTF8(const wchar_t * const & str);

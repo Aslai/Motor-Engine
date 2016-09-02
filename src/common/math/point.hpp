@@ -6,11 +6,21 @@
 namespace Motor{
     template<class T, size_t dimensions>
     class Point {
+		template<class U>
+		static void assign(T * data, const U & value){
+			*data = value;
+		}
+		template<class U, class ... Args>
+		static void assign(T * data, const U & value, const Args ... values ){
+			*data = value;
+			assign(data + 1, values...);
+		}
+
         T data[dimensions];
     public:
         template<class ... Args>
-        Point(Args... values) :
-            data{ ((T)values) ...} {
+        Point(Args... values) {
+			assign(data, values...);
             static_assert( (sizeof...(Args) == dimensions), "Number of arguments provided does not match dimensionality of point object." );
         }
         T & operator[](size_t idx){

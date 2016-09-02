@@ -13,65 +13,61 @@ extern "C" {
 
 
 #include <ctime>
-class Stopwatch{
-    struct timespec start;
-    public:
-    Stopwatch();
-    void Start();
-    double Seconds();
-    unsigned long long Nanoseconds();
-};
-#include <time.h>
+#include "util/stopwatch.hpp"
 
-Stopwatch::Stopwatch(){
+void my_audio_proc(void *user, uint8_t *stream, int len) {
+	Motor::AudioBuffer & buffer = *(Motor::AudioBuffer*) user;
 
+	len = (len > buffer.Size() * sizeof(float) ? buffer.Size() * sizeof(float) : len);
+	memcpy(stream, buffer.Data(), len);
+	float peak, avg;
+	float avgcnt = 0;
+	peak = avg = 0;
+	float localpeak = 0;
+	size_t highcnt = 0;
+	for (int i = 0; i < len / sizeof(float); ++i){
+		float sample = abs(buffer.Data()[i]);
+		if (sample >= 1){
+			highcnt++;
+		}
+		if (sample > peak){
+			peak = sample;
+		}
+		if (sample > localpeak){
+			localpeak = sample;
+		}
+		if (i % 100 == 0){
+			avg += localpeak;
+			localpeak = 0;
+			avgcnt += 1;
+		}
+	}
+	if (peak >= 1){
+		printf("Peak: %f\tAvg: %f\tHighcnt: %llu\n", peak, avg / avgcnt, highcnt);
+	}
+	buffer.Advance(len / sizeof(float));
 }
-void Stopwatch::Start(){
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-}
-double Stopwatch::Seconds(){
-    struct timespec tr, tn;
-    clock_getres(CLOCK_THREAD_CPUTIME_ID, &tr);
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tn);
-    double s = (tn.tv_sec - start.tv_sec);
-    s *= 1000000000;
-    s += tn.tv_nsec;
-    s -= start.tv_nsec;
-    s /= 1000000000;
-    return s;
-}
-unsigned long long Stopwatch::Nanoseconds(){
-    struct timespec tr, tn;
-    clock_getres(CLOCK_THREAD_CPUTIME_ID, &tr);
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tn);
-    unsigned long long s = (tn.tv_sec - start.tv_sec);
-    s *= 1000000000;
-    s += tn.tv_nsec;
-    s -= start.tv_nsec;
-    return s;
-}
-
 
 int main(int argc, char * argv[]){
 	try{
-	    Motor::AudioBuffer buf1, buf2;
-	    char samples1[9] = {1,2,3,4,5,6,7,8,9};
+		Motor::AudioBuffer buf1, buf2;
+		Stopwatch timer;
+	    /*char samples1[9] = {1,2,3,4,5,6,7,8,9};
 	    float *samples2 = new float[44100*60*60];
         for( int i = 0; i < 44100*60*60; ++i ){
-            samples2 [i] = (float)(rand() % 2000) / 100000.0;
+            samples2 [i] = (float)(rand() % 2000) / 1000.0;
         }
         buf1.Push(samples2, 44100*60*60);
         buf2.Push(samples2, 44100*60*60);
         printf("Starting timer...\n");
         //buf2.Push(samples, 10);
-        Stopwatch timer;
-        Motor::AudioMixerCompress<3,1,1,2,4000> mix;
+        Motor::AudioMixerCompress mix(0.1,100,10000);
         timer.Start();
-        mix.Mix(buf1);
+        mix.Mix2(buf1);
         auto end = timer.Seconds();
         printf("Mix done in %f seconds\n", end);
         timer.Start();
-        mix.Mix2(buf2);
+        mix.Mix(buf2);
         end = timer.Seconds();
         printf("Mix2 done in %f seconds\n", end);
         /*for( int i = 0; i < buf1.Size() && i < buf2.Size(); ++i ){
@@ -94,7 +90,7 @@ int main(int argc, char * argv[]){
 		SDL_Window *window;
 		SDL_GLContext context;
 
-		if (SDL_Init(SDL_INIT_VIDEO) < 0){
+		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0){
 			throw Motor::Exception::Error("Unable to initialize SDL");
 		}
 
@@ -113,8 +109,71 @@ int main(int argc, char * argv[]){
 		context = SDL_GL_CreateContext(window);
 		glewInit();
 
+		static uint32_t snd_len;
+		static uint8_t *snd_buf;
+		static SDL_AudioSpec snd_spec;
 
-		SDL_GL_SetSwapInterval(1);
+		if (SDL_LoadWAV("blue_sky.wav", &snd_spec, &snd_buf, &snd_len) == NULL){
+			return 1;
+		}
+		Motor::AudioBuffer buffer, buffer2;
+		if (snd_spec.format == AUDIO_U16){
+			buffer.PushNormalized<uint16_t>((uint16_t*)snd_buf, snd_len / 2, 0, UINT16_MAX);
+			buffer2.PushNormalized<uint16_t>((uint16_t*)snd_buf, snd_len / 2, 0, UINT16_MAX);
+		}
+		else if (snd_spec.format == AUDIO_S16){
+			buffer.PushNormalized<int16_t>((int16_t*)snd_buf, snd_len / 2, INT16_MIN, INT16_MAX);
+			buffer2.PushNormalized<int16_t>((int16_t*)snd_buf, snd_len / 2, INT16_MIN, INT16_MAX);
+		}
+		static uint32_t snd_len2;
+		static uint8_t *snd_buf2;
+		static SDL_AudioSpec snd_spec2;
+
+		if (SDL_LoadWAV("blue_sky2.wav", &snd_spec2, &snd_buf2, &snd_len2) == NULL){
+			return 1;
+		}
+		Motor::AudioBuffer buffer3;
+		if (snd_spec2.format == AUDIO_U16){
+			buffer3.PushNormalized<uint16_t>((uint16_t*)snd_buf2, snd_len2 / 2, 0, UINT16_MAX);
+		}
+		else if (snd_spec2.format == AUDIO_S16){
+			buffer3.PushNormalized<int16_t>((int16_t*)snd_buf2, snd_len2 / 2, INT16_MIN, INT16_MAX);
+		}
+		Motor::AudioMixerCompress mix2(5, 0.1, 44100.0*2.0*0.2, 44100.0 * 2 * 2);
+		Motor::AudioMixerLimit mix3(1, 44100.0*2.0*0.1, 44100.0 * 2 * 1);
+		Motor::AudioMixerAmplify mix4(7);
+		Motor::AudioMixer mix5;
+
+		timer.Start();
+		mix5.Mix(buffer, buffer3, buffer3.Size());
+		buffer3.Rewind();
+		mix5.Mix(buffer, buffer3, buffer3.Size());
+		mix2.Mix(buffer);
+		mix4.Mix(buffer);
+		mix3.Mix(buffer);
+		printf("Mix: %f seconds\n", timer.Seconds());
+		buffer3.Rewind();
+		timer.Start();
+		mix5.Mix(buffer2, buffer3, buffer3.Size());
+		buffer3.Rewind();
+		mix5.Mix(buffer2, buffer3, buffer3.Size());
+		mix2.Mix2(buffer2);
+		mix4.Mix2(buffer2);
+		mix3.Mix2(buffer2);
+		printf("Mix2: %f seconds\n", timer.Seconds());
+
+		snd_spec.format = AUDIO_F32;
+		snd_spec.callback = my_audio_proc;
+		snd_spec.userdata = &buffer;
+
+
+		SDL_GL_SetSwapInterval(1); 
+		
+		if (SDL_OpenAudio(&snd_spec, NULL) < 0){
+			fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
+			exit(-1);
+		}
+		SDL_PauseAudio(0);
 
 		Motor::ShaderFile s;
 		s.Include("..\n../data/");
@@ -127,12 +186,14 @@ int main(int argc, char * argv[]){
 		glClear(GL_COLOR_BUFFER_BIT);
 		SDL_GL_SwapWindow(window);
 
-		SDL_Delay(2000);
+		while (true){
+			SDL_Delay(1000);
+		}
 
 		SDL_GL_DeleteContext(context);
 		SDL_DestroyWindow(window);
 		SDL_Quit();
-		return samples1[0];
+		//return samples1[0];
 
 	}
 	catch (std::exception &e){

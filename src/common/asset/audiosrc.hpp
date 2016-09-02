@@ -11,25 +11,26 @@ namespace Motor{
         friend class AudioMixer;
         std::vector<__m128> samples;
         size_t ptr;
-        bool destructive_advance;
+		size_t dangling;
     protected:
     public:
         AudioBuffer(){
             ptr = 0;
+			dangling = 0;
         }
         void Clear() {
             return samples.clear();
         }
         virtual size_t Size() const {
-            return samples.size() * 4 - ptr;
+            return samples.size() * 4 - ptr * 4 - dangling * 4;
         }
         const float * Data() const {
             return reinterpret_cast<const float*>(samples.data() + ptr);
         }
         virtual void Advance( size_t sample_num ){
             ptr += sample_num / 4;
-            if( ptr > Size() ){
-                ptr = Size();
+			if (ptr + dangling > samples.size()){
+                ptr = samples.size() - dangling;
             }
         }
         virtual void Rewind(){
@@ -37,12 +38,35 @@ namespace Motor{
         }
         __m128 & operator [](size_t idx){
             return samples[idx];
-        }
-        void Push( float * samples_in, size_t length ){
-            for( size_t i = 0; i + 3 < length; i += 4 ){
-                samples.push_back(_mm_load_ps(samples_in + i));
-            }
-        }
+		}
+		void Push(float * samples_in, size_t length){
+			for (size_t i = 0; i + 3 < length; i += 4){
+				samples.push_back(_mm_load_ps(samples_in + i));
+			}
+		}
+		void ToProcess(size_t amount){
+			dangling = amount;
+		}
+		template<class T>
+		static float normalize(const T & v, decltype(v) lo, decltype(v) hi){
+			float value = v;
+			float range = hi;
+			range -= lo;
+			value = value - lo - range * 0.5f;
+			value /= range * 0.5f;
+			return value;
+		}
+		template<class T>
+		void PushNormalized(const T * samples_in, size_t length, T lo, T hi){
+			for (size_t i = 0; i + 3 < length; i += 4){
+				samples.push_back(_mm_set_ps(
+					normalize(samples_in[i + 3], lo, hi),
+					normalize(samples_in[i + 2], lo, hi),
+					normalize(samples_in[i + 1], lo, hi),
+					normalize(samples_in[i], lo, hi)
+					));
+			}
+		}
         void Print( ){
             const float * data = Data();
             for( size_t i = 0; i < Size(); ++i ){
@@ -75,109 +99,224 @@ namespace Motor{
         virtual void Mix( AudioBuffer & dst ){
 
         }
-    };
+	};
 
-    template<size_t ratio_num, size_t ratio_denom, size_t threshold_num, size_t threshold_denom, size_t decay>
-    class AudioMixerCompress : public AudioMixer{
+	static float habsmax_ps(const __m128 & v){
+		__m128 absmask = _mm_cmplt_ps(v, _mm_set1_ps(0));
+		__m128 absv = _mm_or_ps(_mm_and_ps(absmask, _mm_mul_ps(v, _mm_set1_ps(-1))), _mm_andnot_ps(absmask, v));
+		__m128 max1 = _mm_shuffle_ps(absv, absv, _MM_SHUFFLE(0, 0, 3, 2));
+		__m128 max2 = _mm_max_ps(absv, max1);
+		__m128 max3 = _mm_shuffle_ps(max2, max2, _MM_SHUFFLE(0, 0, 0, 1));
+		__m128 max4 = _mm_max_ps(max2, max3);
+		return _mm_cvtss_f32(max4);
+	}
+	static float lerp(const float & a, const float & b, const float & ratio){
+		return a + (b - a) * ratio;
+	}
+
+    class AudioMixerLimit : public AudioMixer{
         size_t decay_amt;
         __m128 attenuate;
-        float attenuatef;
+		float attenuatef;
+		float target, base;
+		size_t window_begin, window_end;
+		float threshold, attack, decay;
+		size_t iattack, idecay;
     public:
-        AudioMixerCompress(){
+        AudioMixerLimit( float threshold, float attack, float decay ) : threshold(threshold), attack(attack), decay(decay){
             decay_amt = 0;
             attenuate = _mm_set_ps(1,1,1,1);
-            attenuatef = 1;
+			attenuatef = 1;
+			target = 1;
+			base = 1;
+			window_begin = window_end = 0;
+			iattack = (size_t)round(attack);
+			idecay = (size_t)round(decay);
+			iattack = iattack - iattack % 4;
+			idecay = idecay - idecay % 4;
         }
         void Mix( AudioBuffer & dst, AudioBuffer & src, size_t amount ){
             Add( dst, src, amount );
             Mix( dst );
         }
-        void Mix( AudioBuffer & dst ){
-            const float ratio_recip = (float) ratio_denom / (float) ratio_num;
-            const float threshold = (float) threshold_num / (float) threshold_denom;
-            const float base = pow( threshold, 1 - ratio_recip );
-            const float decay_recip = (float) 1 / (float) (decay * 4);
-            const float decay_recip2 = (float) 1 / (float) (decay/5+1);
-            //threshold ^ (1 - 1/ratio) * volume^(1/ratio)
-            __m128 zero = _mm_set_ps( 0, 0, 0, 0 );
-            __m128 one = _mm_set_ps( 1, 1, 1, 1 );
-            __m128 cmp = _mm_set_ps( threshold, threshold, threshold, threshold );
-            __m128 bse = _mm_set_ps( base, base, base, base );
-            __m128 recip = _mm_set_ps( ratio_recip, ratio_recip, ratio_recip, ratio_recip );
-            __m128 dec = _mm_set_ps( decay_recip, decay_recip, decay_recip, decay_recip );
-            __m128 dec2 = _mm_set_ps( decay_recip2, decay_recip2, decay_recip2, decay_recip2 );
-            for( size_t i = 0; i < dst.Size() / 4; ++i ){
-                __m128 mask = _mm_cmpgt_ps( dst[i], cmp );
-                if( _mm_movemask_ps( mask ) ){
-                    decay_amt = decay;
-                }
-                if( decay_amt > 0 ){
-                    float lerp_s = (float)(decay - decay_amt) * 4;
-                    __m128 lerp;
+		void Mix(AudioBuffer & dst){
+			for (size_t i = 0; i < dst.Size() / 4 - iattack; ++i){
+				__m128 &lookahead = dst[i + iattack];
+				float velocity = habsmax_ps(lookahead);
+				if (velocity > threshold){
+					if (i >= window_end) {
+						window_begin = i + iattack;
+					}
+					window_end = i + iattack;
+					float new_target = threshold / velocity;
+					if (new_target < target){
+						if (i > window_begin){
+							window_begin = i + iattack;
+							base = target;
+						}
+						else{
+							base = attenuatef;
+						}
+						target = new_target;
+					}
 
-                    if( decay == decay_amt-- ){
-                        lerp = zero;
-                    }
-                    else{
-                        lerp = _mm_set_ps( lerp_s , lerp_s - 1, lerp_s - 2, lerp_s - 3 );
-                    }
-
-                    lerp = _mm_mul_ps( lerp, dec );
-                    mask = _mm_cmpneq_ps( zero, dst[i] );
-                    __m128 compressed = _mm_and_ps( mask, _mm_mul_ps( bse, _mm_pow_ps(dst[i], recip) ) );
-                    __m128 diff = _mm_mul_ps( _mm_sub_ps( dst[i], compressed ), lerp );
-                    dst[i] = _mm_add_ps( compressed, diff );
-                    mask = _mm_cmpgt_ps( dst[i], one );
-                    if( ((uint32_t*)&mask)[0] || ((uint32_t*)&mask)[1] || ((uint32_t*)&mask)[2] || ((uint32_t*)&mask)[3] ){
-                        float amt = ((float*)&dst[i])[0];
-                        amt = ((float*)&dst[i])[1] > amt ? ((float*)&dst[i])[1] : amt;
-                        amt = ((float*)&dst[i])[2] > amt ? ((float*)&dst[i])[2] : amt;
-                        amt = ((float*)&dst[i])[3] > amt ? ((float*)&dst[i])[3] : amt;
-                        amt = 1/ amt;
-                        attenuate = _mm_set_ps( amt, amt, amt, amt );
-                    }
-                    dst[i] = _mm_mul_ps( dst[i], attenuate );
-                    attenuate = _mm_add_ps( attenuate, _mm_mul_ps(dec2, _mm_sub_ps(one, attenuate) ) );
-                }
-            }
-        }
+				}
+				if (i < window_begin){
+					const float dist = (float)((i + iattack - window_begin));
+					const float dist0 = dist / attack;
+					const float dist1 = (dist + 1.0f / 4.0f) / attack;
+					const float dist2 = (dist + 2.0f / 4.0f) / attack;
+					const float dist3 = (dist + 3.0f / 4.0f) / attack;
+					const float attenuatef0 = base + (target - base) * dist0;
+					const float attenuatef1 = base + (target - base) * dist1;
+					const float attenuatef2 = base + (target - base) * dist2;
+					const float attenuatef3 = base + (target - base) * dist3;
+					attenuatef = attenuatef3;
+					attenuate = _mm_set_ps(attenuatef3, attenuatef2, attenuatef1, attenuatef0);
+				}
+				else if (i < window_end){
+					attenuatef = target;
+					attenuate = _mm_set1_ps(attenuatef);
+				}
+				else if (window_end + decay > i){
+					target = 1;
+					float dist = (float)(i - window_end) / decay;
+					attenuatef = base + (target - base) * dist;
+					attenuate = _mm_set1_ps(attenuatef);
+				}
+				else{
+					attenuatef = base = target = 1;
+					attenuate = _mm_set1_ps(attenuatef);
+				}
+				dst[i] = _mm_mul_ps(dst[i], attenuate);
+			}
+			dst.ToProcess(iattack);
+		}
         void Mix2( AudioBuffer & dst ){
-            const float ratio_recip = (float) ratio_denom / (float) ratio_num;
-            const float threshold = (float) threshold_num / (float) threshold_denom;
-            const float base = pow( threshold, 1 - ratio_recip );
-            const float decay_recip = (float) 1 / (float) (decay * 4);
-            const float decay_recip2 = (float) 1 / (float) (decay/5+1);
-            //threshold ^ (1 - 1/ratio) * volume^(1/ratio)
-            const float zero = 0;
-            const float one = 1;
-            const float cmp = threshold;
-            const float bse = base;
-            const float recip = ratio_recip;
-            const float dec = decay_recip;
-            const float dec2 = decay_recip2;
-            for( size_t i = 0; i < dst.Size() / 4; ++i ){
-                for( int j = 0; j < 4; ++j ){
-                    float & d = ((float*)&dst[i])[j];
-                    if( d > cmp ){
-                        decay_amt = decay;
-                    }
-                    if( decay_amt > 0 ){
-                        const float lerp_s = (float)(decay - decay_amt) * 4;
-                        const float lerp = decay == decay_amt-- ? zero : lerp_s * dec;
-                        const float compressed = bse * pow( d, recip );
-                        const float diff = ( d - compressed ) * lerp;
-                        d = compressed + diff;
-                        if( d > 1 ){
-                            attenuatef = 1 / d;
-                        }
-                        d = d * attenuatef;
-                    }
-                }
-                attenuatef = attenuatef + dec2 * (one - attenuatef);
-            }
-        }
-    };
 
+			for (size_t i = 0; i < dst.Size() / 4 - iattack; ++i){
+                for( int j = 0; j < 4; ++j ){
+					float & lookahead = ((float*)&dst[i + iattack])[j];
+					float & d = ((float*)&dst[i])[j];
+ 
+                    if( abs(lookahead) > threshold ){
+						if( i >= window_end ) {
+							window_begin = i + iattack;
+						}
+						window_end = i + iattack;
+						float new_target = threshold / abs(lookahead);
+						if (new_target < target ){
+							if (i > window_begin){
+								window_begin = i + iattack;
+								base = target;
+							}
+							else{
+								base = attenuatef;
+							}
+							target = new_target;
+						}
+
+                    }
+					if (i < window_begin){
+						float dist = (float)(i + iattack - window_begin) / attack;
+						attenuatef = base + (target - base) * dist;
+					}
+					else if (i < window_end){
+						attenuatef = target;
+					}
+					else if (window_end + idecay > i){
+						target = 1;
+						float dist = (float)(i - window_end) / decay;
+						attenuatef = base + (target - base) * dist;
+					}
+					else{
+						attenuatef = base = target = 1;
+					}
+					d = d * attenuatef;
+                }
+			}
+			dst.ToProcess(iattack);
+        }
+	};
+	class AudioMixerCompress : public AudioMixer{
+		float threshold, attack, decay;
+		size_t iattack, idecay;
+		float ratio;
+		float envelope;
+	public:
+		AudioMixerCompress(float ratio, float threshold, float attack, float decay) : ratio(ratio), threshold(threshold), attack(attack), decay(decay){
+			envelope = 0;
+			iattack = (size_t)round(attack);
+			idecay = (size_t)round(decay);
+			iattack = iattack - iattack % 4;
+			idecay = idecay - idecay % 4;
+		}
+		void Mix(AudioBuffer & dst, AudioBuffer & src, size_t amount){
+			Add(dst, src, amount);
+			Mix(dst);
+		}
+		void Mix(AudioBuffer & dst){
+			__m128 invratio = _mm_set1_ps( 1.0f / ratio);
+			__m128 attenuation_base = _mm_set1_ps(pow(threshold, 1.0f - 1.0f / ratio));
+			__m128 attenuation = _mm_set1_ps(1);
+			for (size_t i = 0; i < dst.Size() / 4 - iattack; ++i){
+				envelope *= 1 / decay; 
+				if (1 - envelope > threshold){
+					attenuation = _mm_mul_ps(attenuation_base, _mm_pow_ps(_mm_set1_ps(1 - envelope), invratio));
+					dst[i] = _mm_mul_ps(dst[i], attenuation);
+				}
+				float mx = habsmax_ps(dst[i + iattack]);
+				if (mx > 1 - envelope){
+					envelope = 1 - mx;
+				}
+			}
+			dst.ToProcess(iattack);
+		}
+		void Mix2(AudioBuffer & dst){
+			const float invratio = 1.0f / ratio;
+			const float attenuation_base = pow(threshold, 1.0f - invratio);
+			for (size_t i = 0; i < dst.Size() / 4 - iattack; ++i){
+				envelope *= 1 / decay;
+				float attenuation = attenuation_base * pow(1 - envelope, invratio);
+				for (int j = 0; j < 4; ++j){
+					float & lookahead = ((float*)&dst[i + iattack])[j];
+					float & d = ((float*)&dst[i])[j];
+					if (1 - envelope > threshold){
+						d *= attenuation;
+					}
+					if (abs(lookahead) > 1 - envelope){
+						envelope = 1 - abs(lookahead);
+					}
+				}
+			}
+			dst.ToProcess(iattack);
+		}
+	};
+	class AudioMixerAmplify : public AudioMixer{
+		float scale;
+	public:
+		AudioMixerAmplify(float scale) : scale(scale){
+
+		}
+		void Mix(AudioBuffer & dst, AudioBuffer & src, size_t amount){
+			Add(dst, src, amount);
+			Mix(dst);
+		}
+		void Mix(AudioBuffer & dst){
+			__m128 scaling = _mm_set1_ps(scale);
+			for (size_t i = 0; i < dst.Size() / 4; ++i){
+				dst[i] = _mm_mul_ps(dst[i], scaling);
+			}
+		}
+		void Mix2(AudioBuffer & dst){
+			for (size_t i = 0; i < dst.Size() / 4; ++i){
+				for (int j = 0; j < 4; ++j){
+					float & d = ((float*)&dst[i])[j];
+					d *= scale;
+				}
+			}
+		}
+	};
     class AudioSrc{
     public:
         AudioSrc();
